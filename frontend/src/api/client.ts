@@ -5,6 +5,7 @@ import { reportError } from '../utils/error-reporter'
 
 export class ApiError extends Error {
   status: number
+  //payload 这个 API 错误额外附带的自定义详情数据
   payload?: unknown
   constructor(message: string, status: number, payload?: unknown) {
     super(message)
@@ -15,10 +16,15 @@ export class ApiError extends Error {
 }
 
 type AuthConfig = InternalAxiosRequestConfig & {
+//   authRequired：调用方声明「这个请求必须有 token」。没 token 就本地直接拒掉，不浪费一次网络往返。
+// _retried：标记「这个请求已经因 401 重放过一次了」，防止无限重试。
   authRequired?: boolean
   _retried?: boolean
 }
-
+//import.meta.env.VITE_API_BASE Vite 里面读取环境变量
+// A ?? B
+// 当 A 是 null 或者 undefined 的时候，才返回 B； 
+// 如果 A 是空字符串 ""、0、false，不会走 B
 const API_BASE = (import.meta.env.VITE_API_BASE as string | undefined) ?? '/api'
 const http = axios.create({ baseURL: API_BASE })
 

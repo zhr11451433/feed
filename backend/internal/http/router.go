@@ -2,6 +2,7 @@ package http
 
 import (
 	"backend/internal/account"
+	"backend/internal/video"
 	"log"
 
 	"github.com/gin-gonic/gin"
@@ -22,6 +23,7 @@ func SetRouter(gdb *gorm.DB) *gin.Engine {
 	r.GET("/healthz", func(c *gin.Context) {
 		c.JSON(200, gin.H{"status": "ok"})
 	})
+	r.Static("/static", "./.run/uploads")
 	repo := account.NewAccountRepository(gdb)
 	svc := account.NewAccountService(repo)
 	h := account.NewAccountHandler(svc)
@@ -37,6 +39,17 @@ func SetRouter(gdb *gorm.DB) *gin.Engine {
 	{
 		protected.Use(jwtmw.JWTAuth(repo))
 		protected.POST("/logout", h.Logout)
+	}
+	vh := video.NewVideoHandler(video.NewStore(), video.NewVideoService(gdb))
+	vg := r.Group("/video")
+	vg.POST("/getDetail", vh.GetDetail)
+	vg.POST("/listByAuthorID", vh.ListByAuthorID)
+	protectedVideo := vg.Group("")
+	protectedVideo.Use(jwtmw.JWTAuth(repo))
+	{
+		protectedVideo.POST("/uploadVideo", vh.UploadVideo)
+		protectedVideo.POST("/uploadCover", vh.UploadCover)
+		protectedVideo.POST("/publish", vh.PublishVideo)
 	}
 	return r
 }

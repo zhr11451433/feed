@@ -3,6 +3,7 @@ package db
 import (
 	"backend/internal/account"
 	"backend/internal/config"
+	"backend/internal/video"
 	"fmt"
 	"time"
 
@@ -34,6 +35,9 @@ func NewDB(dbcfg config.DatabaseConfig) (*gorm.DB, error) {
 
 var models = []any{
 	&account.Account{},
+	&video.Tag{},
+	&video.Video{},
+	&video.VideoTag{},
 }
 
 func AutoMigrate(gdb *gorm.DB) error {

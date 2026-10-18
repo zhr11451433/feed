@@ -152,7 +152,7 @@ func LoadLocalDev(filename string) (Config, bool, error) {
 func DefaultLocalConfig() Config {
 	cfg := Config{
 		Server:   ServerConfig{Port: 8080},
-		Database: DatabaseConfig{Host: "localhost", Port: 3306, User: "root", Password: "", DBName: "feed"},
+		Database: DatabaseConfig{Host: "localhost", Port: 3306, User: "root", Password: "jgep4321", DBName: "feed"},
 		Redis:    RedisConfig{Host: "localhost", Port: 6379, Password: "123456", DB: 0},
 		RabbitMQ: RabbitMQConfig{Host: "localhost", Port: 5672, Username: "admin", Password: "password123"},
 		ObservabilityConfig: ObservabilityConfig{Pprof: PprofConfig{

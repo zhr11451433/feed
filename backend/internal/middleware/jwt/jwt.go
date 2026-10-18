@@ -55,3 +55,15 @@ func GetAccountID(c *gin.Context) (uint, error) {
 	}
 	return id, nil
 }
+
+func GetUsername(c *gin.Context) (string, error) {
+	v, ok := c.Get("username")
+	if !ok {
+		return "", errors.New("username not found")
+	}
+	name, ok := v.(string)
+	if !ok || name == "" {
+		return "", errors.New("username has invalid type")
+	}
+	return name, nil
+}
