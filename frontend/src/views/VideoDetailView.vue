@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { computed, reactive, watch } from 'vue'
 import { useRoute } from 'vue-router'
-
+import { useAuthStore } from '../stores/auth'
+import * as likeApi from '../api/like'
+import { useLike } from '../composables/useLike'
 import AppShell from '../components/AppShell.vue'
 import UserAvatar from '../components/UserAvatar.vue'
 import { ApiError } from '../api/client'
@@ -10,7 +12,9 @@ import type { Video } from '../api/types'
 
 const route = useRoute()
 const id = computed(() => Number(route.params.id))
-
+const auth = useAuthStore()
+const { busy, toggleLike } = useLike()
+const likeState = reactive({ id: 0, is_liked: false, likes_count: 0 })
 const state = reactive({
   loading: false,
   error: '',
@@ -27,6 +31,13 @@ async function loadVideo() {
   state.error = ''
   try {
     state.video = await videoApi.getDetail(id.value)
+    likeState.id = state.video.id
+    likeState.likes_count = state.video.likes_count
+    likeState.is_liked = false
+    if (auth.isLoggedIn) {
+      const res = await likeApi.isLiked(state.video.id)
+      likeState.is_liked = res.is_liked
+}
   } catch (e) {
     state.video = null
     state.error = e instanceof ApiError ? e.message : String(e)
@@ -52,6 +63,9 @@ watch(id, () => void loadVideo(), { immediate: true })
         </div>
       </div>
       <p v-if="state.video.description" class="subtle">{{ state.video.description }}</p>
+      <button class="pill" type="button" :disabled="!!busy[String(likeState.id)]" @click="toggleLike(likeState)">
+  {{ likeState.is_liked ? '已赞' : '点赞' }} {{ likeState.likes_count }}
+</button>
     </div>
   </AppShell>
 </template>

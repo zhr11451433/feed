@@ -120,6 +120,8 @@ function toApiError(error: unknown): ApiError {
   return new ApiError(error instanceof Error ? error.message : String(error), 0)
 }
 
+//postJson 和 postForm 都是用来向后端发送 HTTP POST 请求的封装函数
+
 export function postJson<T>(path: string, body: unknown, options?: { authRequired?: boolean }): Promise<T> {
   return http.post<T>(path, body ?? {}, { authRequired: options?.authRequired } as AuthConfig).then((r) => r.data)
 }

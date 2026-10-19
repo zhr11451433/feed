@@ -9,12 +9,11 @@ import (
 )
 
 type VideoService struct {
-	db   *gorm.DB
 	repo *VideoRepository
 }
 
 func NewVideoService(db *gorm.DB) *VideoService {
-	return &VideoService{db: db, repo: NewVideoRepository(db)}
+	return &VideoService{repo: NewVideoRepository(db)}
 }
 
 func (s *VideoService) Publish(ctx context.Context, v *Video) error {
@@ -25,7 +24,7 @@ func (s *VideoService) Publish(ctx context.Context, v *Video) error {
 	if v.Title == "" || v.PlayURL == "" || v.CoverURL == "" {
 		return apierror.ErrValidation
 	}
-	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+	return s.repo.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		if err := tx.Create(v).Error; err != nil {
 			return err
 		}

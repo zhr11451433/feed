@@ -38,6 +38,8 @@ var models = []any{
 	&video.Tag{},
 	&video.Video{},
 	&video.VideoTag{},
+	&video.Like{},
+	&video.Comment{},
 }
 
 func AutoMigrate(gdb *gorm.DB) error {

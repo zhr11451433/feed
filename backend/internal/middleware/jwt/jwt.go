@@ -42,6 +42,19 @@ func JWTAuth(accountRepo *account.AccountRepository) gin.HandlerFunc {
 	}
 }
 
+//软鉴权：没有 token 当游客；有 token 就必须通过 JWTAuth。
+
+func SoftJWTAuth(accountRepo *account.AccountRepository) gin.HandlerFunc {
+	strict := JWTAuth(accountRepo)
+	return func(c *gin.Context) {
+		if c.GetHeader("Authorization") == "" {
+			c.Next()
+			return
+		}
+		strict(c)
+	}
+}
+
 //handler 不自己解析 JWT。中间件放进去的类型是 uint，取的时候要断言
 
 func GetAccountID(c *gin.Context) (uint, error) {

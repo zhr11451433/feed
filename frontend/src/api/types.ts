@@ -26,3 +26,28 @@ export type Video = {
   likes_count: number
   popularity: number
 }
+
+export type FeedAuthor = {
+  id: number
+  username: string
+}
+
+export type FeedVideoItem = {
+  id: number
+  author: FeedAuthor
+  title: string
+  description?: string
+  play_url: string
+  cover_url: string
+  create_time: number
+  likes_count: number
+  is_liked: boolean
+}
+
+export type ListLatestResponse = {
+  video_list: FeedVideoItem[]
+  next_time: number
+  has_more: boolean
+}
+
+export type IsLikedResponse = { is_liked: boolean }

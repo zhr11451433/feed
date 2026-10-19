@@ -2,6 +2,7 @@ package http
 
 import (
 	"backend/internal/account"
+	"backend/internal/feed"
 	"backend/internal/video"
 	"log"
 
@@ -50,6 +51,29 @@ func SetRouter(gdb *gorm.DB) *gin.Engine {
 		protectedVideo.POST("/uploadVideo", vh.UploadVideo)
 		protectedVideo.POST("/uploadCover", vh.UploadCover)
 		protectedVideo.POST("/publish", vh.PublishVideo)
+	}
+	fh := feed.NewFeedHandler(feed.NewFeedService(feed.NewFeedRepository(gdb)))
+	feedGroup := r.Group("/feed")
+	{
+		feedGroup.Use(jwtmw.SoftJWTAuth(repo))
+		feedGroup.POST("/listLatest", fh.ListLatest)
+	}
+	lh := video.NewLikeHandler(video.NewLikeService(gdb))
+	likeGroup := r.Group("/like")
+	likeGroup.Use(jwtmw.JWTAuth(repo))
+	{
+		likeGroup.POST("/like", lh.Like)
+		likeGroup.POST("/unlike", lh.Unlike)
+		likeGroup.POST("/isLiked", lh.IsLiked)
+	}
+	ch := video.NewCommentHandler(video.NewCommentService(gdb))
+	commentGroup := r.Group("/comment")
+	commentGroup.POST("/listAll", ch.ListAll)
+	protectedComment := commentGroup.Group("")
+	protectedComment.Use(jwtmw.JWTAuth(repo))
+	{
+		protectedComment.POST("/publish", ch.Publish)
+		protectedComment.POST("/delete", ch.Delete)
 	}
 	return r
 }

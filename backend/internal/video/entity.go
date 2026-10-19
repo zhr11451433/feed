@@ -33,6 +33,42 @@ type VideoTag struct {
 	TagID   uint `gorm:"not null;uniqueIndex:uidx_video_tag,priority:2;index"`
 }
 
+// 同一个 (video_id, account_id) 只能有一行。
+// 连点两次时，第二次 INSERT 会被这个唯一索引拒绝（MySQL 1062）。
+
+type Like struct {
+	ID        uint      `gorm:"primaryKey" json:"id"`
+	VideoID   uint      `gorm:"not null;uniqueIndex:idx_like_video_account,priority:1" json:"video_id"`
+	AccountID uint      `gorm:"not null;uniqueIndex:idx_like_video_account,priority:2" json:"account_id"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+type LikeRequest struct {
+	VideoID uint `json:"video_id"`
+}
+
+type Comment struct {
+	ID        uint      `gorm:"primaryKey" json:"id"`
+	Username  string    `gorm:"size:255;not null" json:"username"`
+	VideoID   uint      `gorm:"not null;index" json:"video_id"`
+	AuthorID  uint      `gorm:"not null;index" json:"author_id"`
+	Content   string    `gorm:"type:text;not null" json:"content"`
+	CreatedAt time.Time `gorm:"autoCreateTime" json:"created_at"`
+}
+
+type PublishCommentRequest struct {
+	VideoID uint   `json:"video_id"`
+	Content string `json:"content"`
+}
+
+type DeleteCommentRequest struct {
+	CommentID uint `json:"comment_id"`
+}
+
+type ListCommentsRequest struct {
+	VideoID uint `json:"video_id"`
+}
+
 type PublishVideoRequest struct {
 	Title       string `json:"title"`
 	Description string `json:"description"`
