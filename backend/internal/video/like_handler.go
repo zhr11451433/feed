@@ -78,3 +78,20 @@ func (h *LikeHandler) write(c *gin.Context, like bool) {
 		c.JSON(apierror.ClassifyHTTPStatus(err), gin.H{"error": err.Error()})
 	}
 }
+
+func (h *LikeHandler) ListMyLikedVideos(c *gin.Context) {
+	accountID, err := jwtmw.GetAccountID(c)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
+		return
+	}
+	videos, err := h.svc.ListLikedVideos(c.Request.Context(), accountID)
+	if err != nil {
+		c.JSON(apierror.ClassifyHTTPStatus(err), gin.H{"error": err.Error()})
+		return
+	}
+	if videos == nil {
+		videos = []Video{}
+	}
+	c.JSON(http.StatusOK, videos)
+}

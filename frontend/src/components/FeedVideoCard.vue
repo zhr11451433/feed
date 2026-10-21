@@ -3,7 +3,11 @@ import { RouterLink } from 'vue-router'
 
 import UserAvatar from './UserAvatar.vue'
 import type { FeedVideoItem } from '../api/types'
+import { useAuthStore } from '../stores/auth'
+import { useSocialStore } from '../stores/social'
 
+const auth = useAuthStore()
+const social = useSocialStore()
 const props = defineProps<{ item: FeedVideoItem; busy?: boolean }>()
 const emit = defineEmits<{ toggleLike: [item: FeedVideoItem] }>()
 </script>
@@ -17,12 +21,21 @@ const emit = defineEmits<{ toggleLike: [item: FeedVideoItem] }>()
       <RouterLink class="title" :to="`/video/${item.id}`">{{ item.title }}</RouterLink>
       <div class="subtle author">
         <UserAvatar :username="item.author.username" :id="item.author.id" :size="28" />
-        <span>@{{ item.author.username }} · #{{ item.author.id }}</span>
+        <RouterLink :to="`/u/${item.author.id}`">@{{ item.author.username }} · #{{ item.author.id }}</RouterLink>
       </div>
       <p v-if="item.description" class="subtle">{{ item.description }}</p>
       <div class="row">
         <button class="pill" type="button" :disabled="props.busy" @click="emit('toggleLike', props.item)">
   {{ item.is_liked ? '已赞' : '点赞' }} {{ item.likes_count }}
+</button>
+        <button
+  v-if="auth.claims?.account_id !== item.author.id"
+  class="pill"
+  type="button"
+  :disabled="!!social.busy[String(item.author.id)]"
+  @click="social.toggle(item.author.id)"
+>
+  {{ social.isFollowing(item.author.id) ? '已关注' : '关注' }}
 </button>
         <RouterLink class="pill" :to="`/video/${item.id}`">播放</RouterLink>
       </div>

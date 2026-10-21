@@ -9,11 +9,14 @@ import UserAvatar from '../components/UserAvatar.vue'
 import { ApiError } from '../api/client'
 import * as videoApi from '../api/video'
 import type { Video } from '../api/types'
+import { ref } from 'vue'
+import CommentDrawer from '../components/CommentDrawer.vue'
 
 const route = useRoute()
 const id = computed(() => Number(route.params.id))
 const auth = useAuthStore()
 const { busy, toggleLike } = useLike()
+const commentsOpen = ref(false)
 const likeState = reactive({ id: 0, is_liked: false, likes_count: 0 })
 const state = reactive({
   loading: false,
@@ -47,6 +50,11 @@ async function loadVideo() {
 }
 
 watch(id, () => void loadVideo(), { immediate: true })
+import { onMounted } from 'vue'
+import { useSocialStore } from '../stores/social'
+
+const social = useSocialStore()
+onMounted(() => void social.refresh())
 </script>
 
 <template>
@@ -59,14 +67,32 @@ watch(id, () => void loadVideo(), { immediate: true })
         <UserAvatar :username="state.video.username" :id="state.video.author_id" :size="40" />
         <div>
           <div class="title" style="margin: 0">{{ state.video.title }}</div>
-          <div class="subtle">@{{ state.video.username }} · #{{ state.video.id }}</div>
+          <RouterLink class="subtle" :to="`/u/${state.video.author_id}`">
+  @{{ state.video.username }}
+</RouterLink>
         </div>
       </div>
       <p v-if="state.video.description" class="subtle">{{ state.video.description }}</p>
+      <button class="pill" type="button" @click="commentsOpen = true">评论</button>
       <button class="pill" type="button" :disabled="!!busy[String(likeState.id)]" @click="toggleLike(likeState)">
   {{ likeState.is_liked ? '已赞' : '点赞' }} {{ likeState.likes_count }}
 </button>
+  <button
+  v-if="state.video && auth.claims?.account_id !== state.video.author_id"
+  class="pill"
+  type="button"
+  :disabled="!!social.busy[String(state.video.author_id)]"
+  @click="social.toggle(state.video.author_id)"
+>
+  {{ social.isFollowing(state.video.author_id) ? '已关注' : '关注' }}
+</button>
     </div>
+    <CommentDrawer
+  v-if="commentsOpen && state.video"
+  :video-id="state.video.id"
+  :title="state.video.title"
+  @close="commentsOpen = false"
+/>
   </AppShell>
 </template>
 

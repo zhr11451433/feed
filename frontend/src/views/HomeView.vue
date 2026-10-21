@@ -7,7 +7,12 @@ import FeedVideoCard from '../components/FeedVideoCard.vue'
 import { useVideoFeed } from '../composables/useVideoFeed'
 
 const route = useRoute()
-const { state, load } = useVideoFeed()
+import { useSocialStore } from '../stores/social'
+
+const social = useSocialStore()
+const { tab, state, load } = useVideoFeed()
+
+watch(tab, () => void load(true))
 const { busy, toggleLike } = useLike()
 //我要创建一个响应式引用，它里面存放的值应该是 HTMLElement 或 null
 //ref<HTMLElement | null>(null) 里面的泛型不是在约定 HTML 元素有哪些属性，
@@ -60,6 +65,7 @@ function bindObserver() {
 }
 //组件挂载以后做什么？
 onMounted(async () => {
+  await social.refresh()
   await load(true)
   await nextTick()
   bindObserver()
@@ -86,13 +92,20 @@ onBeforeUnmount(() => observer?.disconnect())
 <template>
   <AppShell>
     <div class="card">
-      <p class="title">推荐</p>
-      <p class="subtle">按发布时间从新到旧。往下滚会继续加载。</p>
-    </div>
+  <div class="row">
+    <button type="button" class="pill" :class="{ ok: tab === 'recommend' }" @click="tab = 'recommend'">推荐</button>
+    <button type="button" class="pill" :class="{ ok: tab === 'following' }" @click="tab = 'following'">关注</button>
+  </div>
+  <p class="subtle">
+    {{ tab === 'following' ? '只看我关注的作者。翻页用返回的 next_time，单位是秒。' : '按发布时间从新到旧。' }}
+  </p>
+</div>
 
     <div v-if="state.loading && state.items.length === 0" class="card">加载中…</div>
     <div v-else-if="state.error && state.items.length === 0" class="card">{{ state.error }}</div>
-    <div v-else-if="shown.length === 0" class="card">没有视频。先去「发布」传一条。</div>
+    <div v-else-if="shown.length === 0" class="card">
+  {{ tab === 'following' ? '关注的人还没有视频' : '没有视频。先去「发布」传一条。' }}
+</div>
 
     <div class="list">
       <FeedVideoCard

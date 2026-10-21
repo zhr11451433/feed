@@ -43,3 +43,30 @@ type FindByUsernameRequest struct {
 type RefreshRequest struct {
 	RefreshToken string `json:"refresh_token"`
 }
+
+type GetProfileRequest struct {
+	AccountID uint `json:"account_id"`
+}
+
+type GetProfileResponse struct {
+	Account       Account `json:"account"`
+	VideoCount    int64   `json:"video_count"`
+	TotalLikes    int64   `json:"total_likes"`
+	FollowerCount int64   `json:"follower_count"`
+	VloggerCount  int64   `json:"vlogger_count"`
+}
+
+type UpdateProfileRequest struct {
+	AvatarURL string `json:"avatar_url"`
+	Bio       string `json:"bio"`
+}
+
+type RenameRequest struct {
+	NewUsername string `json:"new_username"`
+}
+
+type ChangePasswordRequest struct {
+	Username    string `json:"username"`
+	OldPassword string `json:"old_password"`
+	NewPassword string `json:"new_password"`
+}

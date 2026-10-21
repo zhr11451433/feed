@@ -3,6 +3,7 @@ package db
 import (
 	"backend/internal/account"
 	"backend/internal/config"
+	"backend/internal/social"
 	"backend/internal/video"
 	"fmt"
 	"time"
@@ -40,6 +41,7 @@ var models = []any{
 	&video.VideoTag{},
 	&video.Like{},
 	&video.Comment{},
+	&social.Social{},
 }
 
 func AutoMigrate(gdb *gorm.DB) error {

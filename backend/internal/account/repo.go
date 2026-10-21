@@ -57,3 +57,34 @@ func (r *AccountRepository) FindByRefreshToken(ctx context.Context, refreshToken
 	}
 	return &account, nil
 }
+
+func (r *AccountRepository) UpdateAvatar(ctx context.Context, id uint, avatarURL string) error {
+	return r.db.WithContext(ctx).Model(&Account{}).Where("id = ?", id).
+		Update("avatar_url", avatarURL).Error
+}
+
+func (r *AccountRepository) UpdateFields(ctx context.Context, id uint, updates map[string]any) error {
+	return r.db.WithContext(ctx).Model(&Account{}).Where("id = ?", id).
+		Updates(updates).Error
+}
+
+func (r *AccountRepository) RenameWithToken(ctx context.Context, id uint, newUsername, token string) error {
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		result := tx.Model(&Account{}).Where("id = ?", id).Update("username", newUsername)
+		if result.Error != nil {
+			return result.Error
+		}
+		if result.RowsAffected == 0 {
+			return gorm.ErrRecordNotFound
+		}
+		return tx.Model(&Account{}).Where("id = ?", id).Update("token", token).Error
+	})
+}
+
+func (r *AccountRepository) ChangePassword(ctx context.Context, id uint, passwordHash string) error {
+	return r.db.WithContext(ctx).Model(&Account{}).Where("id = ?", id).Updates(map[string]any{
+		"password":      passwordHash,
+		"token":         "",
+		"refresh_token": "",
+	}).Error
+}

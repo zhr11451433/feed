@@ -25,3 +25,8 @@ export function publishVideo(input: { title: string; description: string; play_u
 export function getDetail(id: number) {
   return postJson<Video>('/video/getDetail', { id })
 }
+
+export async function listByAuthorId(authorId: number) {
+  const videos = await postJson<Video[] | null>('/video/listByAuthorID', { author_id: authorId })
+  return videos ?? []
+}

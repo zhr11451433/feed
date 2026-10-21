@@ -59,3 +59,21 @@ func (r *FeedRepository) ListLikedIDs(ctx context.Context, accountID uint, video
 	}
 	return liked, nil
 }
+
+func (r *FeedRepository) ListByFollowing(ctx context.Context, limit int, followerID uint, latestBefore time.Time) ([]*video.Video, error) {
+	if followerID == 0 {
+		return []*video.Video{}, nil
+	}
+	sub := r.db.WithContext(ctx).Table("socials").
+		Select("vlogger_id").
+		Where("follower_id = ?", followerID)
+	query := r.db.WithContext(ctx).Model(&video.Video{}).
+		Where("author_id IN (?)", sub).
+		Order("create_time DESC")
+	if !latestBefore.IsZero() {
+		query = query.Where("create_time < ?", latestBefore)
+	}
+	var videos []*video.Video
+	err := query.Limit(limit).Find(&videos).Error
+	return videos, err
+}

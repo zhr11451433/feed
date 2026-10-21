@@ -16,6 +16,7 @@ import (
 	"github.com/joho/godotenv"
 
 	apphttp "backend/internal/http"
+	rediscache "backend/internal/middleware/redis"
 )
 
 func main() {
@@ -56,8 +57,24 @@ func main() {
 		log.Fatalf("Failed to auto migrate database: %v", err)
 	}
 	defer db.CloseDB(sqlDB)
+	cache, err := rediscache.NewFromEnv(&cfg.Redis)
+	if err != nil {
+		log.Printf("Redis config error (cache disabled): %v", err)
+		cache = nil
+	} else {
+		pingCtx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
+		defer cancel()
+		if err := cache.Ping(pingCtx); err != nil {
+			log.Printf("Redis not available (cache disabled): %v", err)
+			_ = cache.Close()
+			cache = nil
+		} else {
+			defer cache.Close()
+			log.Printf("Redis connected (cache enabled)")
+		}
+	}
 	// 设置路由
-	r := apphttp.SetRouter(sqlDB)
+	r := apphttp.SetRouter(sqlDB, cache)
 	//优雅关闭
 	srv := &http.Server{
 		Addr:    ":" + strconv.Itoa(cfg.Server.Port),

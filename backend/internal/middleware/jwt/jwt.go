@@ -3,16 +3,20 @@ package jwt
 import (
 	"backend/internal/account"
 	"backend/internal/auth"
+	rediscache "backend/internal/middleware/redis"
+	"context"
 	"errors"
+	"log"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 )
 
 //受保护的接口以后都挂这个中间件。解析失败要 Abort，否则后面的 handler 仍会执行
 
-func JWTAuth(accountRepo *account.AccountRepository) gin.HandlerFunc {
+func JWTAuth(accountRepo *account.AccountRepository, cache *rediscache.Client) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		header := c.GetHeader("Authorization")
 		if header == "" {
@@ -31,21 +35,14 @@ func JWTAuth(accountRepo *account.AccountRepository) gin.HandlerFunc {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid or expired token"})
 			return
 		}
-		info, err := accountRepo.FindByID(c.Request.Context(), claims.AccountID)
-		if err != nil || info.Token == "" || info.Token != parts[1] {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "token has been revoked"})
-			return
-		}
-		c.Set("accountID", claims.AccountID)
-		c.Set("username", claims.Username)
-		c.Next()
+		check(c, claims, parts[1], accountRepo, cache)
 	}
 }
 
 //软鉴权：没有 token 当游客；有 token 就必须通过 JWTAuth。
 
-func SoftJWTAuth(accountRepo *account.AccountRepository) gin.HandlerFunc {
-	strict := JWTAuth(accountRepo)
+func SoftJWTAuth(accountRepo *account.AccountRepository, cache *rediscache.Client) gin.HandlerFunc {
+	strict := JWTAuth(accountRepo, cache)
 	return func(c *gin.Context) {
 		if c.GetHeader("Authorization") == "" {
 			c.Next()
@@ -79,4 +76,38 @@ func GetUsername(c *gin.Context) (string, error) {
 		return "", errors.New("username has invalid type")
 	}
 	return name, nil
+}
+
+func check(c *gin.Context, claims *auth.Claims, tokenString string, accountRepo *account.AccountRepository, cache *rediscache.Client) {
+	if cache != nil {
+		key := cache.Key("account:%d", claims.AccountID)
+		cacheCtx, cancel := context.WithTimeout(c.Request.Context(), 50*time.Millisecond)
+		defer cancel()
+		b, err := cache.GetBytes(cacheCtx, key)
+		if err == nil {
+			if string(b) != tokenString {
+				c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "token has been revoked"})
+				return
+			}
+			c.Set("accountID", claims.AccountID)
+			c.Set("username", claims.Username)
+			c.Next()
+			return
+		}
+	}
+	info, err := accountRepo.FindByID(c.Request.Context(), claims.AccountID)
+	if err != nil || info.Token == "" || info.Token != tokenString {
+		c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "token has been revoked"})
+		return
+	}
+	if cache != nil {
+		cacheCtx, cancel := context.WithTimeout(c.Request.Context(), 50*time.Millisecond)
+		defer cancel()
+		if err := cache.SetBytes(cacheCtx, cache.Key("account:%d", claims.AccountID), []byte(tokenString), 24*time.Hour); err != nil {
+			log.Printf("failed to set token cache: %v", err)
+		}
+	}
+	c.Set("accountID", claims.AccountID)
+	c.Set("username", claims.Username)
+	c.Next()
 }

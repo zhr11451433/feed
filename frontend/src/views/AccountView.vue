@@ -77,7 +77,10 @@ async function goRegister() {
           <div class="subtle mono">#{{ me.id }}</div>
         </div>
       </div>
-      <p class="subtle" style="margin-top: 12px">作品、粉丝、设置下一阶段再接。刷新页面后，这里应该还是登录状态。</p>
+      <div class="row" style="margin-top: 12px">
+  <button class="primary" type="button" @click="router.push(`/u/${me.id}`)">我的主页</button>
+  <button class="ghost" type="button" @click="router.push('/settings')">设置</button>
+</div>
     </div>
   </AppShell>
 </template>

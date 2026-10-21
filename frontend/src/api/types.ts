@@ -27,6 +27,15 @@ export type Video = {
   popularity: number
 }
 
+export type Comment = {
+  id: number
+  username: string
+  video_id: number
+  author_id: number
+  content: string
+  created_at: string
+}
+
 export type FeedAuthor = {
   id: number
   username: string
@@ -51,3 +60,28 @@ export type ListLatestResponse = {
 }
 
 export type IsLikedResponse = { is_liked: boolean }
+
+export type GetAllVloggersResponse = {
+  vloggers: Account[]
+  vlogger_count: number
+}
+
+export type GetAllFollowersResponse = {
+  followers: Account[]
+  follower_count: number
+}
+
+// next_time 是秒。ListLatestResponse 的 next_time 是毫秒。
+export type ListByFollowingResponse = {
+  video_list: FeedVideoItem[]
+  next_time: number
+  has_more: boolean
+}
+
+export type ProfileResponse = {
+  account: Account
+  video_count: number
+  total_likes: number
+  follower_count: number
+  vlogger_count: number
+}

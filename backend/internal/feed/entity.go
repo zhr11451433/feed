@@ -43,3 +43,15 @@ type ListLatestResponse struct {
 	NextTime  int64           `json:"next_time"`  // 下一页的游标：本页最后一条的创建时间戳
 	HasMore   bool            `json:"has_more"`   // 还有没有更多数据，前端控制「加载更多」提示
 }
+
+type ListByFollowingRequest struct {
+	Limit int `json:"limit"`
+	// 秒。listLatest 的 latest_time 是毫秒，这两个接口不要互相换算。
+	LatestTime int64 `json:"latest_time"`
+}
+
+type ListByFollowingResponse struct {
+	VideoList []FeedVideoItem `json:"video_list"`
+	NextTime  int64           `json:"next_time"` // 秒
+	HasMore   bool            `json:"has_more"`
+}

@@ -2,8 +2,16 @@ package account
 
 import (
 	"backend/internal/apierror"
+	"crypto/rand"
+	"encoding/hex"
 	"errors"
+	"fmt"
 	"net/http"
+	"os"
+	"path"
+	"path/filepath"
+	"strconv"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -138,4 +146,137 @@ func getAccountID(c *gin.Context) (uint, error) {
 		return 0, errors.New("accountID has invalid type")
 	}
 	return id, nil
+}
+
+func (h *AccountHandler) UploadAvatar(c *gin.Context) {
+	accountID, err := getAccountID(c)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, apierror.JSONBody(err))
+		return
+	}
+	f, err := c.FormFile("file")
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "missing file"})
+		return
+	}
+	const maxSize = 10 << 20 // 10MB
+	if f.Size <= 0 || f.Size > maxSize {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid file size"})
+		return
+	}
+	ext := strings.ToLower(filepath.Ext(f.Filename))
+	switch ext {
+	case ".jpg", ".jpeg", ".png", ".webp":
+	default:
+		c.JSON(http.StatusBadRequest, gin.H{"error": "only .jpg/.jpeg/.png/.webp allowed"})
+		return
+	}
+	dir := filepath.Join(".run", "uploads", "avatars", strconv.FormatUint(uint64(accountID), 10))
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	name, err := randHex(16)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	filename := name + ext
+	if err := c.SaveUploadedFile(f, filepath.Join(dir, filename)); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	urlPath := path.Join("/static", "avatars", strconv.FormatUint(uint64(accountID), 10), filename)
+	avatarURL := buildAbsoluteURL(c, urlPath)
+	if err := h.accountService.UpdateAvatar(c.Request.Context(), accountID, avatarURL); err != nil {
+		c.JSON(apierror.ClassifyHTTPStatus(err), apierror.JSONBody(err))
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"avatar_url": avatarURL})
+}
+
+func (h *AccountHandler) UpdateProfile(c *gin.Context) {
+	accountID, err := getAccountID(c)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, apierror.JSONBody(err))
+		return
+	}
+	var req UpdateProfileRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, apierror.JSONBody(err))
+		return
+	}
+	if err := h.accountService.UpdateProfile(c.Request.Context(), accountID, &req); err != nil {
+		c.JSON(apierror.ClassifyHTTPStatus(err), apierror.JSONBody(err))
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "profile updated"})
+}
+
+func randHex(n int) (string, error) {
+	b := make([]byte, n)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(b), nil
+}
+
+func buildAbsoluteURL(c *gin.Context, p string) string {
+	scheme := "http"
+	if c.Request.TLS != nil {
+		scheme = "https"
+	}
+	if xf := c.GetHeader("X-Forwarded-Proto"); xf != "" {
+		scheme = xf
+	}
+	return fmt.Sprintf("%s://%s%s", scheme, c.Request.Host, p)
+}
+
+func (h *AccountHandler) Rename(c *gin.Context) {
+	accountID, err := getAccountID(c)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, apierror.JSONBody(err))
+		return
+	}
+	var req RenameRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, apierror.JSONBody(err))
+		return
+	}
+	token, err := h.accountService.Rename(c.Request.Context(), accountID, req.NewUsername)
+	if errors.Is(err, ErrNewUsernameRequired) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if errors.Is(err, ErrUsernameTaken) {
+		c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
+		return
+	}
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		c.JSON(http.StatusNotFound, gin.H{"error": "account not found"})
+		return
+	}
+	if err != nil {
+		c.JSON(apierror.ClassifyHTTPStatus(err), apierror.JSONBody(err))
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"token": token})
+}
+
+func (h *AccountHandler) ChangePassword(c *gin.Context) {
+	var req ChangePasswordRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "unsuccessfully password changed"})
+		return
+	}
+	err := h.accountService.ChangePassword(c.Request.Context(), req.Username, req.OldPassword, req.NewPassword)
+	if errors.Is(err, apierror.ErrValidation) || errors.Is(err, apierror.ErrUnauthorized) || errors.Is(err, gorm.ErrRecordNotFound) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "unsuccessfully password changed"})
+		return
+	}
+	if err != nil {
+		c.JSON(apierror.ClassifyHTTPStatus(err), apierror.JSONBody(err))
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "successfully password changed"})
 }

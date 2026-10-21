@@ -79,3 +79,18 @@ func (s *LikeService) IsLiked(ctx context.Context, accountID, videoID uint) (boo
 		Count(&n).Error
 	return n > 0, err
 }
+
+func (s *LikeService) ListLikedVideos(ctx context.Context, accountID uint) ([]Video, error) {
+	videos := make([]Video, 0)
+	if accountID == 0 {
+		return videos, nil
+	}
+	err := s.db.WithContext(ctx).
+		Model(&Video{}).
+		Joins("JOIN likes ON likes.video_id = videos.id").
+		Where("likes.account_id = ?", accountID).
+		Order("likes.created_at DESC").
+		Limit(200).
+		Find(&videos).Error
+	return videos, err
+}

@@ -24,7 +24,7 @@ func TestMain(m *testing.M) {
 func TestJWTAuthMissingHeader(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
-	r.GET("/x", JWTAuth(nil), func(c *gin.Context) { c.Status(http.StatusOK) })
+	r.GET("/x", JWTAuth(nil, nil), func(c *gin.Context) { c.Status(http.StatusOK) })
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/x", nil))
 	if w.Code != http.StatusUnauthorized || !strings.Contains(w.Body.String(), "missing authorization header") {
@@ -35,7 +35,7 @@ func TestJWTAuthMissingHeader(t *testing.T) {
 func TestJWTAuthRejectsBadHeaderAndFakeToken(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
-	r.GET("/x", JWTAuth(nil), func(c *gin.Context) { c.Status(http.StatusOK) })
+	r.GET("/x", JWTAuth(nil, nil), func(c *gin.Context) { c.Status(http.StatusOK) })
 
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/x", nil)
@@ -88,7 +88,7 @@ func TestJWTAuthChecksStoredToken(t *testing.T) {
 	}
 
 	r := gin.New()
-	r.GET("/x", JWTAuth(repo), func(c *gin.Context) {
+	r.GET("/x", JWTAuth(repo, nil), func(c *gin.Context) {
 		id, err := GetAccountID(c)
 		if err != nil || id != a.ID {
 			t.Errorf("id=%d err=%v", id, err)

@@ -3,8 +3,12 @@ package account
 import (
 	"backend/internal/apierror"
 	"backend/internal/auth"
+	rediscache "backend/internal/middleware/redis"
 	"context"
 	"errors"
+	"log"
+	"strings"
+	"time"
 
 	"github.com/go-sql-driver/mysql"
 	"golang.org/x/crypto/bcrypt"
@@ -25,14 +29,18 @@ func CheckPassword(hash string, plain string) error {
 	return bcrypt.CompareHashAndPassword([]byte(hash), []byte(plain))
 }
 
-var ErrUsernameTaken = errors.New("用户名已存在")
+var (
+	ErrNewUsernameRequired = errors.New("new_username is required")
+	ErrUsernameTaken       = errors.New("用户名已存在")
+)
 
 type AccountService struct {
-	repo *AccountRepository
+	repo  *AccountRepository
+	cache *rediscache.Client
 }
 
-func NewAccountService(repo *AccountRepository) *AccountService {
-	return &AccountService{repo: repo}
+func NewAccountService(repo *AccountRepository, cache *rediscache.Client) *AccountService {
+	return &AccountService{repo: repo, cache: cache}
 }
 
 func (s *AccountService) CreateAccount(ctx context.Context, account *Account) error {
@@ -70,6 +78,7 @@ func (s *AccountService) Login(ctx context.Context, username, password string) (
 	if err := s.repo.Login(ctx, account.ID, access, refresh); err != nil {
 		return nil, "", "", err
 	}
+	s.storeAccessToken(ctx, account.ID, access)
 	return account, access, refresh, nil
 }
 
@@ -88,7 +97,11 @@ func (s *AccountService) FindByID(ctx context.Context, id uint) (*Account, error
 }
 
 func (s *AccountService) Logout(ctx context.Context, id uint) error {
-	return s.repo.Logout(ctx, id)
+	if err := s.repo.Logout(ctx, id); err != nil {
+		return err
+	}
+	s.storeAccessToken(ctx, id, "")
+	return nil
 }
 
 func (s *AccountService) RefreshAccessToken(ctx context.Context, refreshToken string) (string, uint, string, error) {
@@ -109,5 +122,86 @@ func (s *AccountService) RefreshAccessToken(ctx context.Context, refreshToken st
 	if err := s.repo.UpdateToken(ctx, a.ID, access); err != nil {
 		return "", 0, "", err
 	}
+	s.storeAccessToken(ctx, a.ID, access)
 	return access, a.ID, a.Username, nil
+}
+
+func (s *AccountService) UpdateAvatar(ctx context.Context, id uint, avatarURL string) error {
+	if avatarURL == "" {
+		return apierror.ErrValidation
+	}
+	return s.repo.UpdateAvatar(ctx, id, avatarURL)
+}
+
+func (s *AccountService) UpdateProfile(ctx context.Context, id uint, req *UpdateProfileRequest) error {
+	updates := map[string]any{}
+	if req.Bio != "" {
+		updates["bio"] = strings.TrimSpace(req.Bio)
+	}
+	if req.AvatarURL != "" {
+		updates["avatar_url"] = strings.TrimSpace(req.AvatarURL)
+	}
+	if len(updates) == 0 {
+		return apierror.ErrValidation
+	}
+	return s.repo.UpdateFields(ctx, id, updates)
+}
+
+func (s *AccountService) Rename(ctx context.Context, id uint, newUsername string) (string, error) {
+	if newUsername == "" {
+		return "", ErrNewUsernameRequired
+	}
+	token, err := auth.GenerateToken(id, newUsername)
+	if err != nil {
+		return "", err
+	}
+	err = s.repo.RenameWithToken(ctx, id, newUsername, token)
+	if mysqlErr, ok := errors.AsType[*mysql.MySQLError](err); ok && mysqlErr.Number == 1062 {
+		return "", ErrUsernameTaken
+	}
+	if err != nil {
+		return "", err
+	}
+	s.storeAccessToken(ctx, id, token)
+	return token, nil
+}
+
+func (s *AccountService) ChangePassword(ctx context.Context, username, oldPassword, newPassword string) error {
+	if username == "" || oldPassword == "" || newPassword == "" {
+		return apierror.ErrValidation
+	}
+	a, err := s.repo.FindByUsername(ctx, username)
+	if err != nil {
+		return err
+	}
+	if err := CheckPassword(a.Password, oldPassword); err != nil {
+		return apierror.ErrUnauthorized
+	}
+	hash, err := HashPassword(newPassword)
+	if err != nil {
+		return err
+	}
+	if err := s.repo.ChangePassword(ctx, a.ID, hash); err != nil {
+		return err
+	}
+	s.storeAccessToken(ctx, a.ID, "")
+	return nil
+}
+
+func (s *AccountService) storeAccessToken(ctx context.Context, id uint, token string) {
+	if s.cache == nil {
+		return
+	}
+	cacheCtx, cancel := context.WithTimeout(ctx, 50*time.Millisecond)
+	defer cancel()
+	key := s.cache.Key("account:%d", id)
+	var err error
+	if token == "" {
+		err = s.cache.Del(cacheCtx, key)
+	} else {
+		err = s.cache.SetBytes(cacheCtx, key, []byte(token), 24*time.Hour)
+	}
+	if err != nil {
+		log.Printf("token cache: %v", err)
+	}
 }
