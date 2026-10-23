@@ -3,12 +3,14 @@ package http
 import (
 	"backend/internal/account"
 	"backend/internal/feed"
+	"backend/internal/middleware/ratelimit"
 	rediscache "backend/internal/middleware/redis"
 	"backend/internal/social"
 	"backend/internal/video"
 	"errors"
 	"log"
 	"net/http"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -29,13 +31,18 @@ func SetRouter(gdb *gorm.DB, cache *rediscache.Client) *gin.Engine {
 		c.JSON(200, gin.H{"status": "ok"})
 	})
 	r.Static("/static", "./.run/uploads")
+	loginLimiter := ratelimit.Limit(cache, "account_login", 10, time.Minute, ratelimit.KeyByIP)
+	registerLimiter := ratelimit.Limit(cache, "account_register", 5, time.Hour, ratelimit.KeyByIP)
+	likeLimiter := ratelimit.Limit(cache, "like_write", 30, time.Minute, ratelimit.KeyByAccount)
+	commentLimiter := ratelimit.Limit(cache, "comment_write", 10, time.Minute, ratelimit.KeyByAccount)
+	socialLimiter := ratelimit.Limit(cache, "social_write", 20, time.Minute, ratelimit.KeyByAccount)
 	repo := account.NewAccountRepository(gdb)
 	svc := account.NewAccountService(repo, cache)
 	h := account.NewAccountHandler(svc)
 	g := r.Group("/account")
 	{
-		g.POST("/register", h.CreateAccount)
-		g.POST("/login", h.Login)
+		g.POST("/register", registerLimiter, h.CreateAccount)
+		g.POST("/login", loginLimiter, h.Login)
 		g.POST("/changePassword", h.ChangePassword)
 		g.POST("/findByID", h.FindByID)
 		g.POST("/findByUsername", h.FindByUsername)
@@ -97,7 +104,7 @@ func SetRouter(gdb *gorm.DB, cache *rediscache.Client) *gin.Engine {
 		protected.POST("/rename", h.Rename)
 		protected.POST("/updateProfile", h.UpdateProfile)
 	}
-	vh := video.NewVideoHandler(video.NewStore(), video.NewVideoService(gdb))
+	vh := video.NewVideoHandler(video.NewStore(), video.NewVideoService(gdb, cache))
 	vg := r.Group("/video")
 	vg.POST("/getDetail", vh.GetDetail)
 	vg.POST("/listByAuthorID", vh.ListByAuthorID)
@@ -108,7 +115,7 @@ func SetRouter(gdb *gorm.DB, cache *rediscache.Client) *gin.Engine {
 		protectedVideo.POST("/uploadCover", vh.UploadCover)
 		protectedVideo.POST("/publish", vh.PublishVideo)
 	}
-	fh := feed.NewFeedHandler(feed.NewFeedService(feed.NewFeedRepository(gdb)))
+	fh := feed.NewFeedHandler(feed.NewFeedService(feed.NewFeedRepository(gdb), cache))
 	feedGroup := r.Group("/feed")
 	following := r.Group("/feed")
 	following.Use(jwtmw.JWTAuth(repo, cache))
@@ -116,31 +123,34 @@ func SetRouter(gdb *gorm.DB, cache *rediscache.Client) *gin.Engine {
 	{
 		feedGroup.Use(jwtmw.SoftJWTAuth(repo, cache))
 		feedGroup.POST("/listLatest", fh.ListLatest)
+		feedGroup.POST("/listLikesCount", fh.ListLikesCount)
+		feedGroup.POST("/listByTag", fh.ListByTag)
+		feedGroup.POST("/listByPopularity", fh.ListByPopularity)
 	}
-	lh := video.NewLikeHandler(video.NewLikeService(gdb))
+	lh := video.NewLikeHandler(video.NewLikeService(gdb, cache))
 	likeGroup := r.Group("/like")
 	likeGroup.Use(jwtmw.JWTAuth(repo, cache))
 	{
-		likeGroup.POST("/like", lh.Like)
-		likeGroup.POST("/unlike", lh.Unlike)
+		likeGroup.POST("/like", likeLimiter, lh.Like)
+		likeGroup.POST("/unlike", likeLimiter, lh.Unlike)
 		likeGroup.POST("/isLiked", lh.IsLiked)
 		likeGroup.POST("/listMyLikedVideos", lh.ListMyLikedVideos)
 	}
-	ch := video.NewCommentHandler(video.NewCommentService(gdb))
+	ch := video.NewCommentHandler(video.NewCommentService(gdb, cache))
 	commentGroup := r.Group("/comment")
 	commentGroup.POST("/listAll", ch.ListAll)
 	protectedComment := commentGroup.Group("")
 	protectedComment.Use(jwtmw.JWTAuth(repo, cache))
 	{
-		protectedComment.POST("/publish", ch.Publish)
-		protectedComment.POST("/delete", ch.Delete)
+		protectedComment.POST("/publish", commentLimiter, ch.Publish)
+		protectedComment.POST("/delete", commentLimiter, ch.Delete)
 	}
 	sh := social.NewSocialHandler(social.NewSocialService(gdb, repo))
 	socialGroup := r.Group("/social")
 	socialGroup.Use(jwtmw.JWTAuth(repo, cache))
 	{
-		socialGroup.POST("/follow", sh.Follow)
-		socialGroup.POST("/unfollow", sh.Unfollow)
+		socialGroup.POST("/follow", socialLimiter, sh.Follow)
+		socialGroup.POST("/unfollow", socialLimiter, sh.Unfollow)
 		socialGroup.POST("/getAllFollowers", sh.GetAllFollowers)
 		socialGroup.POST("/getAllVloggers", sh.GetAllVloggers)
 		socialGroup.POST("/getCounts", sh.GetCounts)

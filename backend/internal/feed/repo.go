@@ -77,3 +77,61 @@ func (r *FeedRepository) ListByFollowing(ctx context.Context, limit int, followe
 	err := query.Limit(limit).Find(&videos).Error
 	return videos, err
 }
+
+func (r *FeedRepository) GetByIDs(ctx context.Context, ids []uint) ([]*video.Video, error) {
+	videos := make([]*video.Video, 0)
+	if len(ids) == 0 {
+		return videos, nil
+	}
+	err := r.db.WithContext(ctx).Where("id IN ?", ids).Find(&videos).Error
+	return videos, err
+}
+
+func (r *FeedRepository) ListByPopularity(ctx context.Context, limit int, popularityBefore int64, timeBefore time.Time, idBefore uint) ([]*video.Video, error) {
+	query := r.db.WithContext(ctx).Model(&video.Video{}).
+		Order("popularity DESC, create_time DESC, id DESC")
+	if !timeBefore.IsZero() && idBefore > 0 {
+		query = query.Where(
+			"(popularity < ?) OR (popularity = ? AND create_time < ?) OR (popularity = ? AND create_time = ? AND id < ?)",
+			popularityBefore,
+			popularityBefore, timeBefore,
+			popularityBefore, timeBefore, idBefore,
+		)
+	}
+	var videos []*video.Video
+	err := query.Limit(limit).Find(&videos).Error
+	return videos, err
+}
+
+func (r *FeedRepository) ListLikesCount(ctx context.Context, limit int, cursor *LikesCountCursor) ([]*video.Video, error) {
+	query := r.db.WithContext(ctx).Model(&video.Video{}).Order("likes_count DESC,id DESC")
+	if cursor != nil {
+		query = query.Where(
+			"(likes_count < ?) OR (likes_count = ? AND id < ?)",
+			cursor.LikesCount, cursor.LikesCount, cursor.ID,
+		)
+	}
+	var videos []*video.Video
+	err := query.Limit(limit).Find(&videos).Error
+	return videos, err
+}
+
+func (r *FeedRepository) ListByTag(ctx context.Context, tagName string, limit int) ([]*video.Video, error) {
+	var videos []*video.Video
+	//videos.id	title	tag_id	tags.name
+	//101	今天去爬山	1	    日常
+	//101	今天去爬山	2 	    美食
+	//102	我的午餐	    2	    美食
+	//103	周末去徒步	1	    日常
+	err := r.db.WithContext(ctx).Model(&video.Video{}).
+		Joins("JOIN video_tags ON video_tags.video_id = videos.id").
+		Joins("JOIN tags ON tags.id = video_tags.tag_id").
+		Where("tags.name = ?", tagName).
+		//id	title	   标签
+		//101	今天去爬山	日常
+		//103	周末去徒步	日常
+		Order("videos.create_time DESC").
+		Limit(limit).
+		Find(&videos).Error
+	return videos, err
+}

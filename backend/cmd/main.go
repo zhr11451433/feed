@@ -3,6 +3,7 @@ package main
 import (
 	"backend/internal/config"
 	"backend/internal/db"
+	"backend/internal/middleware/rabbitmq"
 	"context"
 	"errors"
 	"log"
@@ -56,7 +57,10 @@ func main() {
 	if err := db.AutoMigrate(sqlDB); err != nil {
 		log.Fatalf("Failed to auto migrate database: %v", err)
 	}
-	defer db.CloseDB(sqlDB)
+	defer func() {
+		_ = db.CloseDB(sqlDB)
+	}()
+	//redis
 	cache, err := rediscache.NewFromEnv(&cfg.Redis)
 	if err != nil {
 		log.Printf("Redis config error (cache disabled): %v", err)
@@ -69,9 +73,24 @@ func main() {
 			_ = cache.Close()
 			cache = nil
 		} else {
-			defer cache.Close()
+			defer func() {
+				_ = cache.Close()
+			}()
 			log.Printf("Redis connected (cache enabled)")
 		}
+	}
+	//rabbitmq
+	rmq, err := rabbitmq.NewRabbitMQ(&cfg.RabbitMQ)
+	if err != nil {
+		log.Printf("RabbitMQ not available (mq disabled): %v", err)
+		rmq = nil
+	} else if err := rmq.DeclareTopology(); err != nil {
+		log.Printf("RabbitMQ declare failed (mq disabled): %v", err)
+		_ = rmq.Close()
+		rmq = nil
+	} else {
+		defer rmq.Close()
+		log.Printf("RabbitMQ connected")
 	}
 	// 设置路由
 	r := apphttp.SetRouter(sqlDB, cache)

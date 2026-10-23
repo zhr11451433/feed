@@ -1,6 +1,9 @@
 package feed
 
-import "backend/internal/video"
+import (
+	"backend/internal/video"
+	"time"
+)
 
 type FeedAuthor struct {
 	ID       uint   `json:"id"`
@@ -54,4 +57,46 @@ type ListByFollowingResponse struct {
 	VideoList []FeedVideoItem `json:"video_list"`
 	NextTime  int64           `json:"next_time"` // 秒
 	HasMore   bool            `json:"has_more"`
+}
+
+type ListByPopularityRequest struct {
+	Limit            int       `json:"limit"`
+	AsOf             int64     `json:"as_of"`
+	Offset           int       `json:"offset"`
+	LatestPopularity int64     `json:"latest_popularity"`
+	LatestBefore     time.Time `json:"latest_before"`
+	LatestIDBefore   *uint     `json:"latest_id_before"`
+}
+
+type ListByPopularityResponse struct {
+	VideoList            []FeedVideoItem `json:"video_list"`
+	AsOf                 int64           `json:"as_of"`
+	NextOffset           int             `json:"next_offset"`
+	HasMore              bool            `json:"has_more"`
+	NextLatestPopularity *int64          `json:"next_latest_popularity,omitempty"`
+	NextLatestBefore     *time.Time      `json:"next_latest_before,omitempty"`
+	NextLatestIDBefore   *uint           `json:"next_latest_id_before,omitempty"`
+}
+
+type ListLikesCountRequest struct {
+	Limit            int    `json:"limit"`
+	LikesCountBefore *int64 `json:"likes_count_before,omitempty"`
+	IDBefore         *uint  `json:"id_before,omitempty"`
+}
+
+type LikesCountCursor struct {
+	LikesCount int64
+	ID         uint
+}
+
+type ListLikesCountResponse struct {
+	VideoList            []FeedVideoItem `json:"video_list"`
+	NextLikesCountBefore *int64          `json:"next_likes_count_before,omitempty"`
+	NextIDBefore         *uint           `json:"next_id_before,omitempty"`
+	HasMore              bool            `json:"has_more"`
+}
+
+type ListByTagRequest struct {
+	TagName string `json:"tag_name"`
+	Limit   int    `json:"limit"`
 }

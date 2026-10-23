@@ -2,6 +2,7 @@ package video
 
 import (
 	"backend/internal/apierror"
+	rediscache "backend/internal/middleware/redis"
 	"context"
 	"errors"
 	"strings"
@@ -12,13 +13,13 @@ import (
 var ErrForbidden = errors.New("forbidden")
 
 type CommentService struct {
-	db *gorm.DB
+	db    *gorm.DB
+	cache *rediscache.Client
 }
 
-func NewCommentService(db *gorm.DB) *CommentService {
-	return &CommentService{db: db}
+func NewCommentService(db *gorm.DB, cache *rediscache.Client) *CommentService {
+	return &CommentService{db: db, cache: cache}
 }
-
 func (s *CommentService) Publish(ctx context.Context, comment *Comment) error {
 	//删掉字符串两头的空白字符
 	comment.Username = strings.TrimSpace(comment.Username)
@@ -29,12 +30,24 @@ func (s *CommentService) Publish(ctx context.Context, comment *Comment) error {
 	if comment.Content == "" {
 		return errors.New("content is required")
 	}
-	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		if err := tx.Select("id").First(&Video{}, comment.VideoID).Error; err != nil {
 			return err
 		}
-		return tx.Create(comment).Error
+		if err := tx.Create(comment).Error; err != nil {
+			return err
+		}
+		if err := tx.Model(&Video{}).Where("id = ?", comment.VideoID).
+			UpdateColumn("popularity", gorm.Expr("popularity + 1")).Error; err != nil {
+			return err
+		}
+		return nil
 	})
+	if err != nil {
+		return err
+	}
+	UpdatePopularityCache(ctx, s.cache, comment.VideoID, 1)
+	return nil
 }
 
 func (s *CommentService) Delete(ctx context.Context, commentID, accountID uint) error {
