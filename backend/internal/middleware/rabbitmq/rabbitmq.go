@@ -2,9 +2,14 @@ package rabbitmq
 
 import (
 	"backend/internal/config"
+	"context"
+	"crypto/rand"
+	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strconv"
+	"time"
 
 	amqp "github.com/rabbitmq/amqp091-go"
 )
@@ -184,4 +189,31 @@ func (r *RabbitMQ) DeclareTopology() error {
 
 	// 5. 所有声明均成功，返回 nil。
 	return nil
+}
+
+func PublishJSON(ctx context.Context, ch *amqp.Channel, exchange, routingKey string, payload any) error {
+	if ch == nil {
+		return errors.New("channel is not initialized")
+	}
+	if exchange == "" || routingKey == "" {
+		return errors.New("exchange and routingKey are required")
+	}
+	b, err := json.Marshal(payload)
+	if err != nil {
+		return err
+	}
+	return ch.PublishWithContext(ctx, exchange, routingKey, false, false, amqp.Publishing{
+		ContentType:  "application/json",
+		DeliveryMode: amqp.Persistent,
+		Timestamp:    time.Now(),
+		Body:         b,
+	})
+}
+
+func newEventID(n int) (string, error) {
+	b := make([]byte, n)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(b), nil
 }

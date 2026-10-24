@@ -105,3 +105,13 @@ type GetDetailRequest struct {
 type ListByAuthorIDRequest struct {
 	AuthorID uint `json:"author_id"`
 }
+
+//事务性发件箱：和视频同一事务写入，轮询成功后再删除
+
+type OutboxMsg struct {
+	ID         uint      `gorm:"primaryKey"`
+	VideoID    uint      `gorm:"index"`
+	EventType  string    `gorm:"type:varchar(50)"`
+	CreateTime time.Time `gorm:"autoCreateTime"`
+	Status     string    `gorm:"type:varchar(50);index"`
+}

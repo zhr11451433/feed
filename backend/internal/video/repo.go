@@ -34,3 +34,19 @@ func (r *VideoRepository) ListByAuthorID(ctx context.Context, authorID uint) ([]
 	}
 	return videos, nil
 }
+
+func (r *VideoRepository) IsExist(ctx context.Context, id uint) (bool, error) {
+	var n int64
+	err := r.db.WithContext(ctx).Model(&Video{}).Where("id = ?", id).Count(&n).Error
+	return n > 0, err
+}
+
+func (r *VideoRepository) ChangeLikesCount(ctx context.Context, id uint, change int64) error {
+	return r.db.WithContext(ctx).Model(&Video{}).Where("id = ?", id).
+		UpdateColumn("likes_count", gorm.Expr("GREATEST(likes_count + ?, 0)", change)).Error
+}
+
+func (r *VideoRepository) ChangePopularity(ctx context.Context, id uint, change int64) error {
+	return r.db.WithContext(ctx).Model(&Video{}).Where("id = ?", id).
+		UpdateColumn("popularity", gorm.Expr("GREATEST(popularity + ?, 0)", change)).Error
+}

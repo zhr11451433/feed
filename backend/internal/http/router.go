@@ -3,10 +3,12 @@ package http
 import (
 	"backend/internal/account"
 	"backend/internal/feed"
+	"backend/internal/middleware/rabbitmq"
 	"backend/internal/middleware/ratelimit"
 	rediscache "backend/internal/middleware/redis"
 	"backend/internal/social"
 	"backend/internal/video"
+	"backend/internal/worker"
 	"errors"
 	"log"
 	"net/http"
@@ -18,7 +20,7 @@ import (
 	jwtmw "backend/internal/middleware/jwt"
 )
 
-func SetRouter(gdb *gorm.DB, cache *rediscache.Client) *gin.Engine {
+func SetRouter(gdb *gorm.DB, cache *rediscache.Client, rmq *rabbitmq.RabbitMQ) *gin.Engine {
 	if gdb == nil {
 		log.Fatal("gdb is nil")
 	}
@@ -127,7 +129,16 @@ func SetRouter(gdb *gorm.DB, cache *rediscache.Client) *gin.Engine {
 		feedGroup.POST("/listByTag", fh.ListByTag)
 		feedGroup.POST("/listByPopularity", fh.ListByPopularity)
 	}
-	lh := video.NewLikeHandler(video.NewLikeService(gdb, cache))
+	var likeMQ *rabbitmq.LikeMQ
+	if rmq != nil {
+		var err error
+		likeMQ, err = rabbitmq.NewLikeMQ(rmq)
+		if err != nil {
+			log.Printf("LikeMQ init failed (mq disabled): %v", err)
+			likeMQ = nil
+		}
+	}
+	lh := video.NewLikeHandler(video.NewLikeService(gdb, cache, likeMQ))
 	likeGroup := r.Group("/like")
 	likeGroup.Use(jwtmw.JWTAuth(repo, cache))
 	{
@@ -136,7 +147,16 @@ func SetRouter(gdb *gorm.DB, cache *rediscache.Client) *gin.Engine {
 		likeGroup.POST("/isLiked", lh.IsLiked)
 		likeGroup.POST("/listMyLikedVideos", lh.ListMyLikedVideos)
 	}
-	ch := video.NewCommentHandler(video.NewCommentService(gdb, cache))
+	var popMQ *rabbitmq.PopularityMQ
+	if rmq != nil {
+		var err error
+		popMQ, err = rabbitmq.NewPopularityMQ(rmq)
+		if err != nil {
+			log.Printf("PopularityMQ init failed (mq disabled): %v", err)
+			popMQ = nil
+		}
+	}
+	ch := video.NewCommentHandler(video.NewCommentService(gdb, cache, popMQ))
 	commentGroup := r.Group("/comment")
 	commentGroup.POST("/listAll", ch.ListAll)
 	protectedComment := commentGroup.Group("")
@@ -155,5 +175,15 @@ func SetRouter(gdb *gorm.DB, cache *rediscache.Client) *gin.Engine {
 		socialGroup.POST("/getAllVloggers", sh.GetAllVloggers)
 		socialGroup.POST("/getCounts", sh.GetCounts)
 	}
+	var timelineMQ *rabbitmq.TimelineMQ
+	if rmq != nil {
+		var err error
+		timelineMQ, err = rabbitmq.NewTimelineMQ(rmq)
+		if err != nil {
+			log.Printf("TimelineMQ init failed (mq disabled): %v", err)
+			timelineMQ = nil
+		}
+	}
+	worker.StartOutboxPoller(gdb, timelineMQ)
 	return r
 }

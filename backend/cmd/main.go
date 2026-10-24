@@ -89,11 +89,13 @@ func main() {
 		_ = rmq.Close()
 		rmq = nil
 	} else {
-		defer rmq.Close()
+		defer func() {
+			_ = rmq.Close()
+		}()
 		log.Printf("RabbitMQ connected")
 	}
 	// 设置路由
-	r := apphttp.SetRouter(sqlDB, cache)
+	r := apphttp.SetRouter(sqlDB, cache, rmq)
 	//优雅关闭
 	srv := &http.Server{
 		Addr:    ":" + strconv.Itoa(cfg.Server.Port),

@@ -2,6 +2,7 @@ package video
 
 import (
 	"backend/internal/apierror"
+	"backend/internal/middleware/rabbitmq"
 	rediscache "backend/internal/middleware/redis"
 	"context"
 	"errors"
@@ -15,10 +16,11 @@ var ErrForbidden = errors.New("forbidden")
 type CommentService struct {
 	db    *gorm.DB
 	cache *rediscache.Client
+	pop   *rabbitmq.PopularityMQ
 }
 
-func NewCommentService(db *gorm.DB, cache *rediscache.Client) *CommentService {
-	return &CommentService{db: db, cache: cache}
+func NewCommentService(db *gorm.DB, cache *rediscache.Client, pop *rabbitmq.PopularityMQ) *CommentService {
+	return &CommentService{db: db, cache: cache, pop: pop}
 }
 func (s *CommentService) Publish(ctx context.Context, comment *Comment) error {
 	//删掉字符串两头的空白字符
@@ -45,6 +47,11 @@ func (s *CommentService) Publish(ctx context.Context, comment *Comment) error {
 	})
 	if err != nil {
 		return err
+	}
+	if s.pop != nil {
+		if err := s.pop.Update(ctx, comment.VideoID, 1); err == nil {
+			return nil
+		}
 	}
 	UpdatePopularityCache(ctx, s.cache, comment.VideoID, 1)
 	return nil
