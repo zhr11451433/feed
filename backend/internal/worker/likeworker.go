@@ -69,8 +69,8 @@ func (w *LikeWorker) handleDelivery(ctx context.Context, d amqp.Delivery) {
 		}
 		if err := w.process(ctx, d.Body); err != nil {
 			if i >= maxRetries {
-				log.Printf("like worker: 重试 %d 次后仍失败, 丢弃: %v", maxRetries, err)
-				_ = d.Ack(false)
+				log.Printf("like worker: 重试 %d 次后进入死信: %v", maxRetries, err)
+				_ = d.Nack(false, false)
 				return
 			}
 			wait := time.Duration(1<<uint(i)) * time.Second
@@ -119,6 +119,9 @@ func (w *LikeWorker) applyLike(ctx context.Context, userID, videoID uint) error 
 	if err != nil || !created {
 		return err
 	}
+	if err := w.videos.ChangeLikesCount(ctx, videoID, 1); err != nil {
+		return err
+	}
 	if err := w.videos.ChangePopularity(ctx, videoID, 1); err != nil {
 		return err
 	}
@@ -133,6 +136,9 @@ func (w *LikeWorker) applyUnlike(ctx context.Context, userID, videoID uint) erro
 	}
 	deleted, err := w.likes.DeleteByVideoAndAccount(ctx, videoID, userID)
 	if err != nil || !deleted {
+		return err
+	}
+	if err := w.videos.ChangeLikesCount(ctx, videoID, -1); err != nil {
 		return err
 	}
 	if err := w.videos.ChangePopularity(ctx, videoID, -1); err != nil {

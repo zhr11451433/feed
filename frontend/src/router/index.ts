@@ -10,7 +10,8 @@ import RelationView from '../views/RelationView.vue'
 import SettingsView from '@/views/SettingsView.vue'
 import UserProfileView from '@/views/UserProfileView.vue'
 import ChangePasswordView from '@/views/ChangePasswordView.vue'
-
+import MessageView from '../views/MessageView.vue'
+import HotView from '../views/HotView.vue'
 const routes = [
     { path: '/', name: 'home', component: HomeView },
     { path: '/account', name: 'account', component: AccountView },
@@ -21,6 +22,9 @@ const routes = [
     { path: '/settings', name: 'settings', component: SettingsView, meta: { requiresAuth: true } },
     { path: '/u/:id', name: 'user-profile', component: UserProfileView },
     { path: '/relations/:id', name: 'relations', component: RelationView, props: true, meta: { requiresAuth: true } },
+    { path: '/messages', name: 'message-list', component: MessageView, meta: { requiresAuth: true } },
+    { path: '/hot', name: 'hot', component: HotView },
+    { path: '/messages/:peerId', name: 'messages', component: MessageView, meta: { requiresAuth: true } },
   ]
 
 const router = createRouter({

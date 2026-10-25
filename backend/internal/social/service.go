@@ -3,9 +3,11 @@ package social
 import (
 	"backend/internal/account"
 	"backend/internal/apierror"
+	"backend/internal/middleware/rabbitmq"
 	"context"
 	"errors"
 	"fmt"
+	"log"
 
 	"github.com/go-sql-driver/mysql"
 	"gorm.io/gorm"
@@ -20,10 +22,11 @@ var (
 type SocialService struct {
 	db       *gorm.DB
 	accounts *account.AccountRepository
+	socialMQ *rabbitmq.SocialMQ
 }
 
-func NewSocialService(db *gorm.DB, accounts *account.AccountRepository) *SocialService {
-	return &SocialService{db: db, accounts: accounts}
+func NewSocialService(db *gorm.DB, accounts *account.AccountRepository, social *rabbitmq.SocialMQ) *SocialService {
+	return &SocialService{db: db, accounts: accounts, socialMQ: social}
 }
 
 func (s *SocialService) Follow(ctx context.Context, followerID, vloggerID uint) error {
@@ -40,7 +43,15 @@ func (s *SocialService) Follow(ctx context.Context, followerID, vloggerID uint) 
 	if mysqlErr, ok := errors.AsType[*mysql.MySQLError](err); ok && mysqlErr.Number == 1062 {
 		return ErrAlreadyFollowed
 	}
-	return err
+	if err != nil {
+		return err
+	}
+	if s.socialMQ != nil {
+		if err := s.socialMQ.Follow(ctx, followerID, vloggerID); err != nil {
+			log.Printf("follow event failed: %v", err)
+		}
+	}
+	return nil
 }
 
 func (s *SocialService) Unfollow(ctx context.Context, followerID, vloggerID uint) error {

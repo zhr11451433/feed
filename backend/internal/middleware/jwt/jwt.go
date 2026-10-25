@@ -111,3 +111,28 @@ func check(c *gin.Context, claims *auth.Claims, tokenString string, accountRepo 
 	c.Set("username", claims.Username)
 	c.Next()
 }
+
+//优先从 URL 查询参数 ?token= 获取 Token，
+//如果没有，再尝试从 Authorization 请求头获取
+
+func SSEAuth(accountRepo *account.AccountRepository, cache *rediscache.Client) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		token := strings.TrimSpace(c.Query("token"))
+		if token == "" {
+			parts := strings.SplitN(c.GetHeader("Authorization"), " ", 2)
+			if len(parts) == 2 && strings.EqualFold(parts[0], "Bearer") {
+				token = parts[1]
+			}
+		}
+		if token == "" {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "missing token"})
+			return
+		}
+		claims, err := auth.ParseToken(token)
+		if err != nil {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid or expired token"})
+			return
+		}
+		check(c, claims, token, accountRepo, cache)
+	}
+}

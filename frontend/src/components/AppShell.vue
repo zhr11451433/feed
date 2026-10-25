@@ -4,7 +4,11 @@ import { RouterLink, useRoute, useRouter } from 'vue-router'
 
 import { useAuthStore } from '../stores/auth'
 import Toaster from './Toaster.vue'
+import NotificationBell from './NotificationBell.vue'
+import { useNotificationStore } from '../stores/notification'
 
+const notices = useNotificationStore()
+notices.start()
 const props = defineProps<{ full?: boolean }>()
 const auth = useAuthStore()
 const router = useRouter()
@@ -77,6 +81,7 @@ async function goSettings() {
         </div>
 
         <div class="dy-top-right">
+          <NotificationBell v-if="auth.isLoggedIn" />
           <RouterLink class="dy-btn dy-btn-ghost" to="/video">+ 发布视频</RouterLink>
         </div>
       </header>

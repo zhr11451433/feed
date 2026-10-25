@@ -3,6 +3,7 @@ package http
 import (
 	"backend/internal/account"
 	"backend/internal/feed"
+	"backend/internal/message"
 	"backend/internal/middleware/rabbitmq"
 	"backend/internal/middleware/ratelimit"
 	rediscache "backend/internal/middleware/redis"
@@ -156,7 +157,16 @@ func SetRouter(gdb *gorm.DB, cache *rediscache.Client, rmq *rabbitmq.RabbitMQ) *
 			popMQ = nil
 		}
 	}
-	ch := video.NewCommentHandler(video.NewCommentService(gdb, cache, popMQ))
+	var commentMQ *rabbitmq.CommentMQ
+	if rmq != nil {
+		var err error
+		commentMQ, err = rabbitmq.NewCommentMQ(rmq)
+		if err != nil {
+			log.Printf("PopularityMQ init failed (mq disabled): %v", err)
+			commentMQ = nil
+		}
+	}
+	ch := video.NewCommentHandler(video.NewCommentService(gdb, cache, popMQ, commentMQ))
 	commentGroup := r.Group("/comment")
 	commentGroup.POST("/listAll", ch.ListAll)
 	protectedComment := commentGroup.Group("")
@@ -165,7 +175,17 @@ func SetRouter(gdb *gorm.DB, cache *rediscache.Client, rmq *rabbitmq.RabbitMQ) *
 		protectedComment.POST("/publish", commentLimiter, ch.Publish)
 		protectedComment.POST("/delete", commentLimiter, ch.Delete)
 	}
-	sh := social.NewSocialHandler(social.NewSocialService(gdb, repo))
+	var socialMQ *rabbitmq.SocialMQ
+	if rmq != nil {
+		var err error
+		socialMQ, err = rabbitmq.NewSocialMQ(rmq)
+		if err != nil {
+			log.Printf("PopularityMQ init failed (mq disabled): %v", err)
+			socialMQ = nil
+		}
+	}
+
+	sh := social.NewSocialHandler(social.NewSocialService(gdb, repo, socialMQ))
 	socialGroup := r.Group("/social")
 	socialGroup.Use(jwtmw.JWTAuth(repo, cache))
 	{
@@ -184,6 +204,27 @@ func SetRouter(gdb *gorm.DB, cache *rediscache.Client, rmq *rabbitmq.RabbitMQ) *
 			timelineMQ = nil
 		}
 	}
+	nh := worker.NewNotificationHandler(gdb)
+	notificationGroup := r.Group("/notification")
+	notificationGroup.Use(jwtmw.JWTAuth(repo, cache))
+	{
+		notificationGroup.POST("/list", nh.List)
+		notificationGroup.POST("/markRead", nh.MarkRead)
+		notificationGroup.POST("/delete", nh.Delete)
+		notificationGroup.POST("/unreadCount", nh.UnreadCount)
+	}
 	worker.StartOutboxPoller(gdb, timelineMQ)
+	hub := worker.NewSSEHub()
+	worker.StartNotificationConsumers(rmq, gdb, hub)
+	stream := r.Group("/notification")
+	stream.Use(jwtmw.SSEAuth(repo, cache))
+	stream.GET("/stream", hub.Stream)
+	mh := message.NewHandler(message.NewRepository(gdb))
+	messageGroup := r.Group("/message")
+	messageGroup.Use(jwtmw.JWTAuth(repo, cache))
+	{
+		messageGroup.POST("/send", mh.Send)
+		messageGroup.POST("/list", mh.List)
+	}
 	return r
 }

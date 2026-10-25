@@ -42,7 +42,6 @@ func (s *LikeService) Like(ctx context.Context, accountID, videoID uint) error {
 	var err error
 	if s.likeMQ != nil {
 		if err = s.likeMQ.Like(ctx, accountID, videoID); err == nil {
-			UpdatePopularityCache(ctx, s.cache, videoID, 1)
 			return nil
 		}
 		log.Printf("like publish failed, direct write: %v", err)
@@ -75,6 +74,8 @@ func (s *LikeService) Like(ctx context.Context, accountID, videoID uint) error {
 	if err != nil {
 		return err
 	}
+	s.forgetDetail(ctx, videoID)
+	UpdatePopularityCache(ctx, s.cache, videoID, 1)
 	return nil
 }
 
@@ -92,7 +93,6 @@ func (s *LikeService) Unlike(ctx context.Context, accountID, videoID uint) error
 	var err error
 	if s.likeMQ != nil {
 		if err = s.likeMQ.Unlike(ctx, accountID, videoID); err == nil {
-			UpdatePopularityCache(ctx, s.cache, videoID, -1)
 			return nil
 		}
 		log.Printf("unlike publish failed, direct write: %v", err)
@@ -125,6 +125,8 @@ func (s *LikeService) Unlike(ctx context.Context, accountID, videoID uint) error
 	if err != nil {
 		return err
 	}
+	s.forgetDetail(ctx, videoID)
+	UpdatePopularityCache(ctx, s.cache, videoID, -1)
 	return nil
 }
 

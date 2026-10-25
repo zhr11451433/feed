@@ -85,3 +85,37 @@ export type ProfileResponse = {
   follower_count: number
   vlogger_count: number
 }
+
+export type DirectMessage = {
+  id: number
+  from_id: number
+  to_id: number
+  content: string
+  is_read: boolean
+  created_at: string
+}
+
+export type ListMessagesResponse = {
+  messages: DirectMessage[]
+}
+
+export type AppNotification = {
+  id: number
+  recipient_id: number
+  sender_id: number
+  type: string
+  target_id: number
+  content: string
+  is_read: boolean
+  created_at: string
+}
+
+export type ListNotificationsResponse = { notifications: AppNotification[] }
+export type UnreadCountResponse = { count: number }
+
+export type ListByPopularityResponse = {
+  video_list: FeedVideoItem[]
+  as_of: number
+  next_offset: number
+  has_more: boolean
+}

@@ -1,0 +1,206 @@
+package worker
+
+import (
+	"backend/internal/middleware/rabbitmq"
+	"context"
+	"encoding/json"
+	"errors"
+	"log"
+	"time"
+
+	amqp "github.com/rabbitmq/amqp091-go"
+	"gorm.io/gorm"
+)
+
+type Notification struct {
+	ID          uint      `gorm:"primaryKey" json:"id"`
+	RecipientID uint      `gorm:"index;not null" json:"recipient_id"`
+	SenderID    uint      `gorm:"not null" json:"sender_id"`
+	Type        string    `gorm:"type:varchar(50);not null" json:"type"`
+	TargetID    uint      `json:"target_id"`
+	Content     string    `gorm:"type:varchar(255)" json:"content"`
+	IsRead      bool      `gorm:"default:false" json:"is_read"`
+	CreatedAt   time.Time `gorm:"autoCreateTime" json:"created_at"`
+}
+
+type NotificationWorker struct {
+	ch    *amqp.Channel
+	db    *gorm.DB
+	queue string
+	hub   NotificationHub
+}
+
+type NotificationHub interface {
+	Push(userID uint, n *Notification)
+}
+
+func NewNotificationWorker(ch *amqp.Channel, db *gorm.DB, queue string, hub NotificationHub) *NotificationWorker {
+	return &NotificationWorker{ch: ch, db: db, queue: queue, hub: hub}
+}
+
+func (w *NotificationWorker) Run(ctx context.Context) error {
+	if w == nil || w.ch == nil || w.db == nil {
+		return errors.New("notification worker is not initialized")
+	}
+	if w.queue == "" {
+		return errors.New("queue is required")
+	}
+	if err := w.db.WithContext(ctx).AutoMigrate(&Notification{}); err != nil {
+		return err
+	}
+	deliveries, err := w.ch.Consume(w.queue, "", false, false, false, false, nil)
+	if err != nil {
+		return err
+	}
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case d, ok := <-deliveries:
+			if !ok {
+				return errors.New("deliveries channel closed")
+			}
+			w.handleDelivery(ctx, d)
+		}
+	}
+}
+
+func (w *NotificationWorker) handleDelivery(ctx context.Context, d amqp.Delivery) {
+	const maxRetries = 3
+	for i := 0; i <= maxRetries; i++ {
+		select {
+		case <-ctx.Done():
+			_ = d.Nack(false, true)
+			return
+		default:
+		}
+		if err := w.process(ctx, d); err != nil {
+			if i >= maxRetries {
+				log.Printf("notification worker: 重试 %d 次后进入死信: %v", maxRetries, err)
+				_ = d.Nack(false, false)
+				return
+			}
+			wait := time.Duration(1<<uint(i)) * time.Second
+			log.Printf("notification worker: 处理失败, %v 后重试 (%d/%d): %v", wait, i+1, maxRetries, err)
+			time.Sleep(wait)
+			continue
+		}
+		_ = d.Ack(false)
+		return
+	}
+}
+
+func (w *NotificationWorker) process(ctx context.Context, d amqp.Delivery) error {
+	body := d.Body
+	if len(body) == 0 {
+		return nil
+	}
+	routingKey := d.RoutingKey
+
+	var notif *Notification
+
+	switch {
+	case routingKey == "like.like":
+		var evt rabbitmq.LikeEvent
+		if err := json.Unmarshal(body, &evt); err != nil {
+			return nil
+		}
+		if evt.UserID == 0 || evt.VideoID == 0 {
+			return nil
+		}
+		var authorID uint
+		if err := w.db.WithContext(ctx).Model(&struct {
+			ID       uint
+			AuthorID uint
+		}{}).Table("videos").Where("id = ?", evt.VideoID).Select("author_id").Scan(&authorID).Error; err != nil {
+			return err
+		}
+		if authorID == 0 || authorID == evt.UserID {
+			return nil
+		}
+		notif = &Notification{RecipientID: authorID, SenderID: evt.UserID, Type: "like", TargetID: evt.VideoID, Content: "点赞了你的视频"}
+
+	case routingKey == "comment.publish":
+		var evt rabbitmq.CommentEvent
+		if err := json.Unmarshal(body, &evt); err != nil {
+			return nil
+		}
+		if evt.AuthorID == 0 || evt.VideoID == 0 {
+			return nil
+		}
+		var authorID uint
+		if err := w.db.WithContext(ctx).Model(&struct {
+			ID       uint
+			AuthorID uint
+		}{}).Table("videos").Where("id = ?", evt.VideoID).Select("author_id").Scan(&authorID).Error; err != nil {
+			return err
+		}
+		if authorID == 0 || authorID == evt.AuthorID {
+			return nil
+		}
+		notif = &Notification{RecipientID: authorID, SenderID: evt.AuthorID, Type: "comment", TargetID: evt.VideoID, Content: "评论了你的视频"}
+
+	case routingKey == "social.follow":
+		var evt rabbitmq.SocialEvent
+		if err := json.Unmarshal(body, &evt); err != nil {
+			return nil
+		}
+		if evt.FollowerID == 0 || evt.VloggerID == 0 {
+			return nil
+		}
+		notif = &Notification{RecipientID: evt.VloggerID, SenderID: evt.FollowerID, Type: "follow", TargetID: evt.FollowerID, Content: "关注了你"}
+	}
+
+	if notif == nil {
+		return nil
+	}
+	if err := w.db.WithContext(ctx).Create(notif).Error; err != nil {
+		return err
+	}
+	if w.hub != nil {
+		w.hub.Push(notif.RecipientID, notif)
+	}
+	return nil
+}
+
+func StartNotificationConsumers(rmq *rabbitmq.RabbitMQ, db *gorm.DB, hub NotificationHub) {
+	if rmq == nil || db == nil {
+		log.Printf("notification consumers disabled: rabbitmq is not initialized")
+		return
+	}
+	ch, err := rmq.NewChannel()
+	if err != nil {
+		log.Printf("notification topic init failed: %v", err)
+		return
+	}
+	topics := []struct{ exchange, queue, key string }{
+		{"like.events", "notification.like", "like.like"},
+		{"comment.events", "notification.comment", "comment.publish"},
+		{"social.events", "notification.social", "social.follow"},
+	}
+	for _, t := range topics {
+		if err := rabbitmq.DeclareTopic(ch, t.exchange, t.queue, t.key); err != nil {
+			log.Printf("notification topic %s failed: %v", t.queue, err)
+		}
+	}
+	_ = ch.Close()
+
+	for _, t := range topics {
+		queue := t.queue
+		go func() {
+			for {
+				ch, err := rmq.NewChannel()
+				if err != nil {
+					log.Printf("notification-%s: 创建 Channel 失败: %v, 5秒后重试", queue, err)
+					time.Sleep(5 * time.Second)
+					continue
+				}
+				log.Printf("notification-%s started, consuming", queue)
+				err = NewNotificationWorker(ch, db, queue, hub).Run(context.Background())
+				_ = ch.Close()
+				log.Printf("notification-%s: %v, 5秒后重连...", queue, err)
+				time.Sleep(5 * time.Second)
+			}
+		}()
+	}
+}
