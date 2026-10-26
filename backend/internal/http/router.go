@@ -113,10 +113,15 @@ func SetRouter(gdb *gorm.DB, cache *rediscache.Client, rmq *rabbitmq.RabbitMQ) *
 	vg.POST("/listByAuthorID", vh.ListByAuthorID)
 	protectedVideo := vg.Group("")
 	protectedVideo.Use(jwtmw.JWTAuth(repo, cache))
+	chunkHandler := video.NewChunkHandler(video.NewChunkSessionStore(cache))
 	{
 		protectedVideo.POST("/uploadVideo", vh.UploadVideo)
 		protectedVideo.POST("/uploadCover", vh.UploadCover)
+		protectedVideo.POST("/chunk/init", chunkHandler.Init)
+		protectedVideo.POST("/chunk/status", chunkHandler.Status)
 		protectedVideo.POST("/publish", vh.PublishVideo)
+		protectedVideo.POST("/chunk/complete", chunkHandler.Complete)
+		protectedVideo.POST("/chunk/upload", chunkHandler.Upload)
 	}
 	fh := feed.NewFeedHandler(feed.NewFeedService(feed.NewFeedRepository(gdb), cache))
 	feedGroup := r.Group("/feed")
