@@ -5,6 +5,7 @@ import (
 	"backend/internal/db"
 	"backend/internal/middleware/rabbitmq"
 	rediscache "backend/internal/middleware/redis"
+	"backend/internal/observability"
 	"backend/internal/video"
 	"backend/internal/worker"
 	"context"
@@ -76,6 +77,19 @@ func main() {
 		log.Printf("PopularityMQ init failed (redis direct): %v", err)
 	} else {
 		popMQ = mq
+	}
+	pprofServer, err := observability.NewPprofServer(
+		"Worker",
+		cfg.ObservabilityConfig.Pprof.Enabled,
+		cfg.ObservabilityConfig.Pprof.WorkerAddr,
+	)
+	if err != nil {
+		log.Printf("Failed to start worker pprof server: %v", err)
+	}
+	if pprofServer != nil {
+		defer func() {
+			_ = pprofServer.Close()
+		}()
 	}
 	go runWorkerWithRetry(ctx, "LikeWorker", rmq.Conn, func(ch *amqp.Channel) error {
 		return worker.NewLikeWorker(

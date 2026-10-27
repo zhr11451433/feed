@@ -1,0 +1,563 @@
+{
+  "info": {
+    "name": "Feed API",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "host", "value": "http://localhost:8080" },
+    { "key": "username", "value": "" },
+    { "key": "password", "value": "pass123" },
+    { "key": "newPassword", "value": "newpass456" },
+    { "key": "jwt_token", "value": "" },
+    { "key": "refresh_token", "value": "" },
+    { "key": "accountId", "value": "1" },
+    { "key": "videoId", "value": "1" },
+    { "key": "uploadId", "value": "" },
+    { "key": "commentId", "value": "1" },
+    { "key": "peerId", "value": "2" }
+  ],
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "if (!pm.collectionVariables.get('username')) pm.collectionVariables.set('username', 'user_' + Date.now());"
+        ]
+      }
+    }
+  ],
+  "item": [
+    {
+      "name": "Health",
+      "item": [
+        {
+          "name": "GET /healthz",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "url": "{{host}}/healthz"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Account 公开",
+      "item": [
+        {
+          "name": "POST /account/register",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"username\": \"{{username}}\",\n  \"password\": \"{{password}}\"\n}" },
+            "url": "{{host}}/account/register"
+          }
+        },
+        {
+          "name": "POST /account/login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "pm.collectionVariables.set('jwt_token', json.token);",
+                  "pm.collectionVariables.set('refresh_token', json.refresh_token);",
+                  "pm.collectionVariables.set('accountId', String(json.account_id));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"username\": \"{{username}}\",\n  \"password\": \"{{password}}\"\n}" },
+            "url": "{{host}}/account/login"
+          }
+        },
+        {
+          "name": "POST /account/refresh",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "if (json.token) pm.collectionVariables.set('jwt_token', json.token);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"refresh_token\": \"{{refresh_token}}\"\n}" },
+            "url": "{{host}}/account/refresh"
+          }
+        },
+        {
+          "name": "POST /account/findByID",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"id\": {{accountId}}\n}" },
+            "url": "{{host}}/account/findByID"
+          }
+        },
+        {
+          "name": "POST /account/findByUsername",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"username\": \"{{username}}\"\n}" },
+            "url": "{{host}}/account/findByUsername"
+          }
+        },
+        {
+          "name": "POST /account/getProfile",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"account_id\": {{accountId}}\n}" },
+            "url": "{{host}}/account/getProfile"
+          }
+        },
+        {
+          "name": "POST /account/changePassword",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"username\": \"{{username}}\",\n  \"old_password\": \"{{password}}\",\n  \"new_password\": \"{{newPassword}}\"\n}" },
+            "url": "{{host}}/account/changePassword"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Account 登录后",
+      "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{jwt_token}}", "type": "string" }] },
+      "item": [
+        {
+          "name": "POST /account/updateProfile",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"bio\": \"hello\"\n}" },
+            "url": "{{host}}/account/updateProfile"
+          }
+        },
+        {
+          "name": "POST /account/uploadAvatar",
+          "request": {
+            "method": "POST",
+            "body": { "mode": "formdata", "formdata": [{ "key": "file", "type": "file", "src": "" }] },
+            "url": "{{host}}/account/uploadAvatar"
+          }
+        },
+        {
+          "name": "POST /account/rename",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"new_username\": \"{{username}}_2\"\n}" },
+            "url": "{{host}}/account/rename"
+          }
+        },
+        {
+          "name": "POST /account/logout",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{}" },
+            "url": "{{host}}/account/logout"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Video",
+      "item": [
+        {
+          "name": "POST /video/getDetail",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"id\": {{videoId}}\n}" },
+            "url": "{{host}}/video/getDetail"
+          }
+        },
+        {
+          "name": "POST /video/listByAuthorID",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"author_id\": {{accountId}}\n}" },
+            "url": "{{host}}/video/listByAuthorID"
+          }
+        },
+        {
+          "name": "POST /video/uploadVideo",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{jwt_token}}", "type": "string" }] },
+            "method": "POST",
+            "body": { "mode": "formdata", "formdata": [{ "key": "file", "type": "file", "src": "" }] },
+            "url": "{{host}}/video/uploadVideo"
+          }
+        },
+        {
+          "name": "POST /video/uploadCover",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{jwt_token}}", "type": "string" }] },
+            "method": "POST",
+            "body": { "mode": "formdata", "formdata": [{ "key": "file", "type": "file", "src": "" }] },
+            "url": "{{host}}/video/uploadCover"
+          }
+        },
+        {
+          "name": "POST /video/publish",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "if (json.id) pm.collectionVariables.set('videoId', String(json.id));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{jwt_token}}", "type": "string" }] },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"title\": \"hello\",\n  \"description\": \"desc #日常\",\n  \"play_url\": \"http://127.0.0.1:8080/static/videos/demo.mp4\",\n  \"cover_url\": \"\"\n}" },
+            "url": "{{host}}/video/publish"
+          }
+        },
+        {
+          "name": "POST /video/chunk/init",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "if (json.upload_id) pm.collectionVariables.set('uploadId', json.upload_id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{jwt_token}}", "type": "string" }] },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"filename\": \"a.mp4\",\n  \"file_size\": 1048576,\n  \"chunk_size\": 5242880,\n  \"total_chunks\": 1,\n  \"file_hash\": \"d41d8cd98f00b204e9800998ecf8427e\"\n}" },
+            "url": "{{host}}/video/chunk/init"
+          }
+        },
+        {
+          "name": "POST /video/chunk/upload",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{jwt_token}}", "type": "string" }] },
+            "method": "POST",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "upload_id", "type": "text", "value": "{{uploadId}}" },
+                { "key": "chunk_index", "type": "text", "value": "0" },
+                { "key": "chunk_hash", "type": "text", "value": "" },
+                { "key": "file", "type": "file", "src": "" }
+              ]
+            },
+            "url": "{{host}}/video/chunk/upload"
+          }
+        },
+        {
+          "name": "POST /video/chunk/status",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{jwt_token}}", "type": "string" }] },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"upload_id\": \"{{uploadId}}\"\n}" },
+            "url": "{{host}}/video/chunk/status"
+          }
+        },
+        {
+          "name": "POST /video/chunk/complete",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{jwt_token}}", "type": "string" }] },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"upload_id\": \"{{uploadId}}\"\n}" },
+            "url": "{{host}}/video/chunk/complete"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Feed",
+      "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{jwt_token}}", "type": "string" }] },
+      "item": [
+        {
+          "name": "POST /feed/listLatest",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"limit\": 10,\n  \"latest_time\": 0\n}" },
+            "url": "{{host}}/feed/listLatest"
+          }
+        },
+        {
+          "name": "POST /feed/listLikesCount",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"limit\": 10,\n  \"likes_count_before\": 0,\n  \"id_before\": 0\n}" },
+            "url": "{{host}}/feed/listLikesCount"
+          }
+        },
+        {
+          "name": "POST /feed/listByPopularity",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"limit\": 10,\n  \"as_of\": 0,\n  \"offset\": 0\n}" },
+            "url": "{{host}}/feed/listByPopularity"
+          }
+        },
+        {
+          "name": "POST /feed/listByTag",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"tag_name\": \"日常\",\n  \"limit\": 10\n}" },
+            "url": "{{host}}/feed/listByTag"
+          }
+        },
+        {
+          "name": "POST /feed/listByFollowing",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"limit\": 10,\n  \"latest_time\": 0\n}" },
+            "url": "{{host}}/feed/listByFollowing"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Like",
+      "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{jwt_token}}", "type": "string" }] },
+      "item": [
+        {
+          "name": "POST /like/like",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"video_id\": {{videoId}}\n}" },
+            "url": "{{host}}/like/like"
+          }
+        },
+        {
+          "name": "POST /like/unlike",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"video_id\": {{videoId}}\n}" },
+            "url": "{{host}}/like/unlike"
+          }
+        },
+        {
+          "name": "POST /like/isLiked",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"video_id\": {{videoId}}\n}" },
+            "url": "{{host}}/like/isLiked"
+          }
+        },
+        {
+          "name": "POST /like/listMyLikedVideos",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{}" },
+            "url": "{{host}}/like/listMyLikedVideos"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Comment",
+      "item": [
+        {
+          "name": "POST /comment/listAll",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"video_id\": {{videoId}}\n}" },
+            "url": "{{host}}/comment/listAll"
+          }
+        },
+        {
+          "name": "POST /comment/publish",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{jwt_token}}", "type": "string" }] },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"video_id\": {{videoId}},\n  \"content\": \"不错\"\n}" },
+            "url": "{{host}}/comment/publish"
+          }
+        },
+        {
+          "name": "POST /comment/delete",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{jwt_token}}", "type": "string" }] },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"comment_id\": {{commentId}}\n}" },
+            "url": "{{host}}/comment/delete"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Social",
+      "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{jwt_token}}", "type": "string" }] },
+      "item": [
+        {
+          "name": "POST /social/follow",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"vlogger_id\": {{peerId}}\n}" },
+            "url": "{{host}}/social/follow"
+          }
+        },
+        {
+          "name": "POST /social/unfollow",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"vlogger_id\": {{peerId}}\n}" },
+            "url": "{{host}}/social/unfollow"
+          }
+        },
+        {
+          "name": "POST /social/getCounts",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{}" },
+            "url": "{{host}}/social/getCounts"
+          }
+        },
+        {
+          "name": "POST /social/getAllFollowers",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{}" },
+            "url": "{{host}}/social/getAllFollowers"
+          }
+        },
+        {
+          "name": "POST /social/getAllVloggers",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{}" },
+            "url": "{{host}}/social/getAllVloggers"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Message",
+      "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{jwt_token}}", "type": "string" }] },
+      "item": [
+        {
+          "name": "POST /message/send",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"to_id\": {{peerId}},\n  \"content\": \"在吗\"\n}" },
+            "url": "{{host}}/message/send"
+          }
+        },
+        {
+          "name": "POST /message/list",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"peer_id\": {{peerId}}\n}" },
+            "url": "{{host}}/message/list"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Notification",
+      "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{jwt_token}}", "type": "string" }] },
+      "item": [
+        {
+          "name": "POST /notification/list",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{}" },
+            "url": "{{host}}/notification/list"
+          }
+        },
+        {
+          "name": "POST /notification/unreadCount",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{}" },
+            "url": "{{host}}/notification/unreadCount"
+          }
+        },
+        {
+          "name": "POST /notification/markRead",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{}" },
+            "url": "{{host}}/notification/markRead"
+          }
+        },
+        {
+          "name": "POST /notification/delete",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"id\": 1\n}" },
+            "url": "{{host}}/notification/delete"
+          }
+        },
+        {
+          "name": "GET /notification/stream",
+          "request": {
+            "method": "GET",
+            "url": "{{host}}/notification/stream?token={{jwt_token}}"
+          }
+        }
+      ]
+    }
+  ]
+}

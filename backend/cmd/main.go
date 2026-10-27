@@ -4,6 +4,7 @@ import (
 	"backend/internal/config"
 	"backend/internal/db"
 	"backend/internal/middleware/rabbitmq"
+	"backend/internal/observability"
 	"context"
 	"errors"
 	"log"
@@ -94,6 +95,20 @@ func main() {
 		}()
 		log.Printf("RabbitMQ connected")
 	}
+	//pprof
+	pprofServer, err := observability.NewPprofServer(
+		"API",
+		cfg.ObservabilityConfig.Pprof.Enabled,
+		cfg.ObservabilityConfig.Pprof.ApiAddr,
+	)
+	if err != nil {
+		log.Printf("Failed to start API pprof server: %v", err)
+	}
+	if pprofServer != nil {
+		defer pprofServer.Close()
+	}
+
+
 	// 设置路由
 	r := apphttp.SetRouter(sqlDB, cache, rmq)
 	//优雅关闭
